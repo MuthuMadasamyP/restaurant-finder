@@ -1,6 +1,6 @@
 from pathlib import Path
 import sys
-
+from source.backend.main import app
 BACKEND_DIR = Path(__file__).resolve().parent / "source" / "backend"
 sys.path.insert(0, str(BACKEND_DIR))
 
