@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from source.backend.database import SessionLocal
-from routes.admin import router as admin_router
+from backend.routes.admin import router as admin_router as admin_router
 from routes.auth import router as auth_router
 from routes.export import router as export_router
 from routes.feedback import router as feedback_router
