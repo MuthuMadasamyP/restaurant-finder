@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from database import SessionLocal
+from source.backend.database import SessionLocal
 from routes.admin import router as admin_router
 from routes.auth import router as auth_router
 from routes.export import router as export_router
