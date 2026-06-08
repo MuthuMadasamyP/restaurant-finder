@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-
+from source.backend.database import SessionLocal
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
