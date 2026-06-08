@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from database import get_db
+from source.backend.database import get_db
 from models.admin_data import (
     ChennaiFavouriteHotel,
     CoimbatoreFavouriteHotel,
