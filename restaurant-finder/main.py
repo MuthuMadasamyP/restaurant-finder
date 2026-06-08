@@ -1,3 +1,4 @@
+from source.backend.main import app
 from pathlib import Path
 import sys
 
