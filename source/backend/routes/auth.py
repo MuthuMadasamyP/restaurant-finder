@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from database import get_db
+from source.backend.database import get_db
 from models.admin_data import Admin, User
 from models.admin_schemas import LoginRequest, SignupRequest, TokenResponse
 from services.auth import create_access_token, hash_password, verify_password
