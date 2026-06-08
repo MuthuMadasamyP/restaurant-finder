@@ -2,7 +2,7 @@ import os
 
 from sqlalchemy.orm import Session
 
-from database import Base, engine
+from source.backend.database import Base, engine
 from models.admin_data import Admin, Setting
 from services.auth import hash_password
 
