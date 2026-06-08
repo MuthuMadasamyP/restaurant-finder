@@ -5,7 +5,7 @@ from datetime import datetime, time, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from database import get_db
+from source.backend.database import get_db
 from models.admin_data import SearchHistory, SearchResult, Setting, StarHotelSearch, User
 from models.restaurant import Restaurant, SearchRequest, SearchResponse
 from services.scraper import scrape_restaurants_threaded
