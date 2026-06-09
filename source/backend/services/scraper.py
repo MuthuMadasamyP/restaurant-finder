@@ -251,6 +251,11 @@ async def _do_scrape(page: Page, location: str, radius_km: float, max_results: i
         return []
 
     # ── VISIT EACH PLACE PAGE ─────────────────────────────────────────────────
+    fast_results = await _extract_restaurants_from_cards(page, max_results)
+    if fast_results:
+        logger.info("Returning %d fast card results", len(fast_results))
+        return fast_results[:max_results]
+
     restaurants: list[dict] = []
     seen_names: set[str]    = set()     # normalised name keys
     seen_addrs: set[str]    = set()     # normalised address keys (catches duplicates with same address)
@@ -300,6 +305,66 @@ async def _do_scrape(page: Page, location: str, radius_km: float, max_results: i
         seen_names.add(name_key)
         restaurants.append(data)
         logger.info("  ✓ [%d] %-35s ★%s", len(restaurants), data["name"], data.get("rating", "?"))
+
+    return restaurants
+
+
+async def _extract_restaurants_from_cards(page: Page, max_results: int) -> list[dict]:
+    """Fast Render-friendly extraction from the search result cards."""
+    try:
+        cards = await page.evaluate(
+            """
+            () => Array.from(document.querySelectorAll("a.hfpxzc[href*='/maps/place/']")).map((anchor) => {
+                const card = anchor.closest(".Nv2PK, [role='article'], div");
+                return {
+                    name: anchor.getAttribute("aria-label") || anchor.textContent || "",
+                    href: anchor.href || "",
+                    text: card ? card.innerText || "" : ""
+                };
+            })
+            """
+        )
+    except Exception as exc:
+        logger.warning("Fast card extraction failed: %s", exc)
+        return []
+
+    restaurants: list[dict] = []
+    seen_names: set[str] = set()
+    for card in cards:
+        name = _clean_text(str(card.get("name") or ""))
+        name_key = re.sub(r"[^a-z0-9]", "", name.lower())
+        if not name_key or name_key in seen_names:
+            continue
+        if name.lower() in JUNK_NAMES_EXACT or any(sub in name.lower() for sub in JUNK_SUBSTRINGS):
+            continue
+
+        text = _clean_text(str(card.get("text") or ""))
+        rating_match = re.search(r"\b([1-5](?:[.,]\d)?)\b", text)
+        rating = rating_match.group(1).replace(",", ".") if rating_match else "N/A"
+
+        category = "N/A"
+        parts = [part.strip() for part in re.split(r"[\n·]", text) if part.strip()]
+        for part in parts:
+            lower = part.lower()
+            if part == name or re.search(r"\d", part):
+                continue
+            if any(word in lower for word in ("restaurant", "hotel", "cafe", "biryani", "food")):
+                category = _clean_text(part)
+                break
+
+        seen_names.add(name_key)
+        restaurants.append(
+            {
+                "name": name,
+                "rating": rating,
+                "address": "N/A",
+                "phone": "N/A",
+                "category": category,
+                "website": _normalise_website_url(card.get("href")),
+            }
+        )
+        if len(restaurants) >= max_results:
+            break
 
     return restaurants
 
