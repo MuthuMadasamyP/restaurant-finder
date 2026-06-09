@@ -106,7 +106,7 @@ async function handleSearch() {
     });
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: "Unknown error" }));
+      const err = await readApiError(res);
       if (res.status === 401 || res.status === 403) {
         handleAuthFailure(err.detail);
         return;
@@ -145,6 +145,24 @@ async function handleSearch() {
   } finally {
     showLoading(false);
   }
+}
+
+async function readApiError(res) {
+  const contentType = res.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    return res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+  }
+
+  const text = await res.text().catch(() => "");
+  const detail = text
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 300);
+
+  return {
+    detail: detail || `HTTP ${res.status}: Render returned a non-JSON server error.`,
+  };
 }
 
 function timeoutSignal(ms) {
