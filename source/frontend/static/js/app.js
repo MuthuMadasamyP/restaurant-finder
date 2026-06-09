@@ -148,6 +148,12 @@ async function handleSearch() {
 }
 
 async function readApiError(res) {
+  if (res.status === 502 || res.status === 503 || res.status === 504) {
+    return {
+      detail: `HTTP ${res.status}: The Render server stopped or timed out during scraping. Try 5 results first; if it repeats, Render free memory is too low for Google Maps scraping.`,
+    };
+  }
+
   const contentType = res.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {
     return res.json().catch(() => ({ detail: `HTTP ${res.status}` }));

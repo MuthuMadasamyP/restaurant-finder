@@ -135,13 +135,14 @@ async def scrape_restaurants(location: str, radius_km: float, max_results: int =
                 "--disable-background-timer-throttling",
                 "--disable-renderer-backgrounding",
                 "--mute-audio",
+                "--no-zygote",
                 "--disable-blink-features=AutomationControlled",
                 "--disable-infobars",
-                "--window-size=1280,900",
+                "--window-size=1024,720",
             ],
         )
         context = await browser.new_context(
-            viewport={"width": 1280, "height": 900},
+            viewport={"width": 1024, "height": 720},
             user_agent=(
                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -154,6 +155,7 @@ async def scrape_restaurants(location: str, radius_km: float, max_results: int =
         )
 
         page = await context.new_page()
+        await page.route("**/*", _block_heavy_assets)
         try:
             results = await _do_scrape(page, location, radius_km, max_results)
         except Exception as exc:
@@ -216,7 +218,7 @@ async def _do_scrape(page: Page, location: str, radius_km: float, max_results: i
         return []
 
     await asyncio.sleep(2)
-    scroll_passes = min(24, max(6, (max_results // 5) + 4))
+    scroll_passes = min(10, max(4, (max_results // 5) + 3))
     await _scroll_feed(page, passes=scroll_passes)
 
     # ── COLLECT HREFS (not element references) ────────────────────────────────
@@ -253,7 +255,7 @@ async def _do_scrape(page: Page, location: str, radius_km: float, max_results: i
     seen_names: set[str]    = set()     # normalised name keys
     seen_addrs: set[str]    = set()     # normalised address keys (catches duplicates with same address)
 
-    candidate_limit = min(len(place_hrefs), max(30, max_results * 3))
+    candidate_limit = min(len(place_hrefs), max(15, max_results * 2))
     for idx, href in enumerate(place_hrefs[:candidate_limit]):
         if len(restaurants) >= max_results:
             break
@@ -300,6 +302,13 @@ async def _do_scrape(page: Page, location: str, radius_km: float, max_results: i
         logger.info("  ✓ [%d] %-35s ★%s", len(restaurants), data["name"], data.get("rating", "?"))
 
     return restaurants
+
+
+async def _block_heavy_assets(route) -> None:
+    if route.request.resource_type in {"image", "media", "font"}:
+        await route.abort()
+        return
+    await route.continue_()
 
 
 async def _extract_restaurant_from_url(page: Page, url: str) -> Optional[dict]:
