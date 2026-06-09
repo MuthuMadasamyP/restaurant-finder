@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 from datetime import datetime, time, timezone
@@ -61,10 +62,22 @@ async def search_restaurants_endpoint(
         )
 
     try:
-        raw_results = await scrape_restaurants_threaded(
-            request.location,
-            request.radius_km,
-            request.max_results,
+        raw_results = await asyncio.wait_for(
+            scrape_restaurants_threaded(
+                request.location,
+                request.radius_km,
+                request.max_results,
+            ),
+            timeout=110,
+        )
+    except TimeoutError:
+        logger.warning("Scraper timed out for location=%r", request.location)
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail=(
+                "Search timed out on the free server. Try 3-5 restaurants, "
+                "or use a more specific area like 'Vilankudi restaurants Madurai'."
+            ),
         )
     except Exception as exc:
         logger.error("Scraper raised an unhandled exception: %s", exc, exc_info=True)

@@ -34,9 +34,9 @@ from playwright.async_api import (
 logger = logging.getLogger(__name__)
 
 # ── Timing constants ──────────────────────────────────────────────────────────
-TIMEOUT      = 10_000   # ms — element wait timeout
-NAV_TIMEOUT  = 35_000   # ms — page navigation timeout
-SETTLE_WAIT  = 1.8      # s  — wait after navigation for content to stabilise
+TIMEOUT      = 5_000    # ms - element wait timeout
+NAV_TIMEOUT  = 12_000   # ms - page navigation timeout
+SETTLE_WAIT  = 0.7      # s  - wait after navigation for content to stabilise
 
 # ── Junk-name filters ─────────────────────────────────────────────────────────
 # Exact matches (after lowercase + strip)
@@ -120,7 +120,7 @@ async def scrape_restaurants(location: str, radius_km: float, max_results: int =
         Keys: name, rating, address, phone, category, website
     """
     results: list[dict] = []
-    max_results = max(1, min(int(max_results or 10), 100))
+    max_results = max(1, min(int(max_results or 10), 10))
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(
@@ -217,8 +217,8 @@ async def _do_scrape(page: Page, location: str, radius_km: float, max_results: i
         logger.warning("Results feed not found — page structure may have changed")
         return []
 
-    await asyncio.sleep(2)
-    scroll_passes = min(10, max(4, (max_results // 5) + 3))
+    await asyncio.sleep(1)
+    scroll_passes = min(5, max(3, (max_results // 5) + 2))
     await _scroll_feed(page, passes=scroll_passes)
 
     # ── COLLECT HREFS (not element references) ────────────────────────────────
@@ -255,7 +255,7 @@ async def _do_scrape(page: Page, location: str, radius_km: float, max_results: i
     seen_names: set[str]    = set()     # normalised name keys
     seen_addrs: set[str]    = set()     # normalised address keys (catches duplicates with same address)
 
-    candidate_limit = min(len(place_hrefs), max(15, max_results * 2))
+    candidate_limit = min(len(place_hrefs), max_results + 4)
     for idx, href in enumerate(place_hrefs[:candidate_limit]):
         if len(restaurants) >= max_results:
             break
