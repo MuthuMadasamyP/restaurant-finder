@@ -253,8 +253,9 @@ async def _do_scrape(page: Page, location: str, radius_km: float, max_results: i
     # ── VISIT EACH PLACE PAGE ─────────────────────────────────────────────────
     fast_results = await _extract_restaurants_from_cards(page, max_results)
     if fast_results:
-        logger.info("Returning %d fast card results", len(fast_results))
-        return fast_results[:max_results]
+        logger.info("Collected %d fast card results", len(fast_results))
+        enriched_results = await _enrich_fast_results(page, fast_results, place_hrefs)
+        return enriched_results[:max_results]
 
     restaurants: list[dict] = []
     seen_names: set[str]    = set()     # normalised name keys
@@ -365,6 +366,34 @@ async def _extract_restaurants_from_cards(page: Page, max_results: int) -> list[
         )
         if len(restaurants) >= max_results:
             break
+
+    return restaurants
+
+
+async def _enrich_fast_results(
+    page: Page,
+    restaurants: list[dict],
+    place_hrefs: list[str],
+) -> list[dict]:
+    """Add detail-page fields for the first few rows without timing out free hosting."""
+    enrich_limit = min(3, len(restaurants), len(place_hrefs))
+    for index in range(enrich_limit):
+        try:
+            detail = await _extract_restaurant_from_url(page, place_hrefs[index])
+        except Exception as exc:
+            logger.warning("Fast result enrichment failed [%d]: %s", index + 1, exc)
+            continue
+
+        if not detail:
+            continue
+
+        for key in ("address", "phone", "category", "website"):
+            value = detail.get(key)
+            if value and value != "N/A":
+                restaurants[index][key] = value
+
+        if detail.get("rating") and detail["rating"] != "N/A":
+            restaurants[index]["rating"] = detail["rating"]
 
     return restaurants
 
