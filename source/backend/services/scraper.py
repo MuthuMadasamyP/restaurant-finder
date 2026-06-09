@@ -20,6 +20,7 @@ Changes in v2:
 
 import asyncio
 import logging
+import os
 import re
 import sys
 from typing import Optional
@@ -376,7 +377,10 @@ async def _enrich_fast_results(
     place_hrefs: list[str],
 ) -> list[dict]:
     """Add detail-page fields for the first few rows without timing out free hosting."""
-    enrich_limit = min(3, len(restaurants), len(place_hrefs))
+    enrich_limit = min(_detail_enrich_limit(), len(restaurants), len(place_hrefs))
+    if enrich_limit <= 0:
+        return restaurants
+
     for index in range(enrich_limit):
         try:
             detail = await _extract_restaurant_from_url(page, place_hrefs[index])
@@ -396,6 +400,13 @@ async def _enrich_fast_results(
             restaurants[index]["rating"] = detail["rating"]
 
     return restaurants
+
+
+def _detail_enrich_limit() -> int:
+    try:
+        return max(0, min(int(os.getenv("DETAIL_ENRICH_LIMIT", "0")), 3))
+    except ValueError:
+        return 0
 
 
 async def _block_heavy_assets(route) -> None:
