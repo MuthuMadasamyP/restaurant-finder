@@ -173,6 +173,11 @@ async def scrape_restaurants_threaded(location: str, radius_km: float, max_resul
     return await asyncio.to_thread(_scrape_restaurants_sync, location, radius_km, max_results)
 
 
+async def scrape_restaurant_detail_threaded(maps_url: str) -> Optional[dict]:
+    """Fetch one Google Maps detail page in a worker thread."""
+    return await asyncio.to_thread(_scrape_restaurant_detail_sync, maps_url)
+
+
 def _scrape_restaurants_sync(location: str, radius_km: float, max_results: int = 10) -> list[dict]:
     if sys.platform.startswith("win") and hasattr(asyncio, "ProactorEventLoop"):
         loop = asyncio.ProactorEventLoop()
@@ -187,6 +192,65 @@ def _scrape_restaurants_sync(location: str, radius_km: float, max_results: int =
 
 
 # ── Core scraping logic ───────────────────────────────────────────────────────
+
+def _scrape_restaurant_detail_sync(maps_url: str) -> Optional[dict]:
+    if sys.platform.startswith("win") and hasattr(asyncio, "ProactorEventLoop"):
+        loop = asyncio.ProactorEventLoop()
+        try:
+            asyncio.set_event_loop(loop)
+            return loop.run_until_complete(scrape_restaurant_detail(maps_url))
+        finally:
+            asyncio.set_event_loop(None)
+            loop.close()
+
+    return asyncio.run(scrape_restaurant_detail(maps_url))
+
+
+async def scrape_restaurant_detail(maps_url: str) -> Optional[dict]:
+    if not maps_url.startswith(("https://www.google.", "https://google.")):
+        raise ValueError("Only Google Maps detail URLs are supported.")
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=True,
+            args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-extensions",
+                "--disable-gpu",
+                "--disable-background-networking",
+                "--disable-background-timer-throttling",
+                "--disable-renderer-backgrounding",
+                "--mute-audio",
+                "--no-zygote",
+                "--disable-blink-features=AutomationControlled",
+                "--disable-infobars",
+                "--window-size=1024,720",
+            ],
+        )
+        context = await browser.new_context(
+            viewport={"width": 1024, "height": 720},
+            user_agent=(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+            locale="en-US",
+        )
+        await context.add_init_script(
+            "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
+        )
+        page = await context.new_page()
+        await page.route("**/*", _block_heavy_assets)
+        try:
+            detail = await _extract_restaurant_from_url(page, maps_url)
+            if detail:
+                detail["maps_url"] = maps_url
+            return detail
+        finally:
+            await browser.close()
+
 
 async def _do_scrape(page: Page, location: str, radius_km: float, max_results: int) -> list[dict]:
     """
@@ -364,6 +428,7 @@ async def _extract_restaurants_from_cards(page: Page, max_results: int) -> list[
                 "phone": "N/A",
                 "category": category,
                 "website": _normalise_website_url(card.get("href")),
+                "maps_url": card.get("href") or "N/A",
             }
         )
         if len(restaurants) >= max_results:

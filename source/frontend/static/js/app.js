@@ -10,6 +10,7 @@ let sortState = { col: null, dir: "asc" };
 let selectedFeedbackRating = 0;
 let userToken = localStorage.getItem("restaurantFinderUserToken") || "";
 let currentUserName = localStorage.getItem("restaurantFinderUserName") || "";
+let detailHydrationRun = 0;
 
 const $ = (id) => document.getElementById(id);
 const qsa = (selector, context = document) => Array.from(context.querySelectorAll(selector));
@@ -130,6 +131,7 @@ async function handleSearch() {
     currentLocation = data.location;
     currentRadius = data.radius_km;
     renderResults(data);
+    hydrateRestaurantDetails(++detailHydrationRun);
     loadSearchHistory();
     showAlert(`Found ${data.total_found} restaurants near ${data.location}.`, "success");
   } catch (err) {
@@ -198,15 +200,16 @@ function renderResults(data) {
     const tr = document.createElement("tr");
     tr.className = "fade-in";
     tr.dataset.restaurantName = restaurant.name || "";
+    tr.dataset.index = String(index);
     tr.style.animationDelay = `${Math.min(index * 28, 420)}ms`;
     tr.innerHTML = `
       <td class="rank-col">${index + 1}</td>
       <td><span class="restaurant-name">${esc(restaurant.name)}</span></td>
       <td>${ratingBadge(restaurant.rating)}</td>
-      <td>${esc(restaurant.category)}</td>
-      <td>${esc(restaurant.address)}</td>
-      <td>${phoneLink(restaurant.phone)}</td>
-      <td>${websiteLink(restaurant.website)}</td>
+      <td class="category-cell">${esc(restaurant.category)}</td>
+      <td class="address-cell">${esc(restaurant.address)}</td>
+      <td class="phone-cell">${phoneLink(restaurant.phone)}</td>
+      <td class="website-cell">${websiteLink(restaurant.website)}</td>
       <td>
         <button type="button" class="favorite-btn" data-index="${index}">
           Favourite
@@ -219,6 +222,81 @@ function renderResults(data) {
   $("resultsSection").style.display = "block";
   $("exportBtn").disabled = false;
   $("resultsSection").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function hydrateRestaurantDetails(runId) {
+  for (let index = 0; index < currentRestaurants.length; index += 1) {
+    if (runId !== detailHydrationRun) return;
+
+    const restaurant = currentRestaurants[index];
+    if (!restaurant?.maps_url || restaurant.maps_url === "N/A") continue;
+    if (hasFullDetails(restaurant)) continue;
+
+    markRowLoading(index);
+    try {
+      const res = await fetch(`${API_BASE}/restaurant/detail`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${userToken}`,
+        },
+        body: JSON.stringify({ maps_url: restaurant.maps_url }),
+        signal: timeoutSignal(45000),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401 || res.status === 403) {
+        handleAuthFailure(data.detail);
+        return;
+      }
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+
+      currentRestaurants[index] = {
+        ...restaurant,
+        ...data,
+        maps_url: restaurant.maps_url,
+      };
+      updateRestaurantRow(index);
+    } catch (err) {
+      console.warn(`Detail fetch failed for row ${index + 1}:`, err);
+      markRowFailed(index);
+    }
+  }
+}
+
+function hasFullDetails(restaurant) {
+  return ["category", "address", "phone", "website"].some((key) => {
+    const value = restaurant[key];
+    return value && value !== "N/A";
+  });
+}
+
+function markRowLoading(index) {
+  const row = document.querySelector(`#resultsBody tr[data-index="${index}"]`);
+  if (!row) return;
+  ["category", "address", "phone", "website"].forEach((key) => {
+    const cell = row.querySelector(`.${key}-cell`);
+    if (cell && cell.textContent.trim() === "-") cell.textContent = "Loading...";
+  });
+}
+
+function markRowFailed(index) {
+  const row = document.querySelector(`#resultsBody tr[data-index="${index}"]`);
+  if (!row) return;
+  ["category", "address", "phone", "website"].forEach((key) => {
+    const cell = row.querySelector(`.${key}-cell`);
+    if (cell && cell.textContent.trim() === "Loading...") cell.innerHTML = '<span class="na-text">-</span>';
+  });
+}
+
+function updateRestaurantRow(index) {
+  const restaurant = currentRestaurants[index];
+  const row = document.querySelector(`#resultsBody tr[data-index="${index}"]`);
+  if (!restaurant || !row) return;
+
+  row.querySelector(".category-cell").innerHTML = esc(restaurant.category);
+  row.querySelector(".address-cell").innerHTML = esc(restaurant.address);
+  row.querySelector(".phone-cell").innerHTML = phoneLink(restaurant.phone);
+  row.querySelector(".website-cell").innerHTML = websiteLink(restaurant.website);
 }
 
 async function loadSearchHistory() {
@@ -465,6 +543,7 @@ async function handleExport() {
 }
 
 function clearResults(options = {}) {
+  detailHydrationRun += 1;
   currentRestaurants = [];
   currentLocation = "";
   sortState = { col: null, dir: "asc" };

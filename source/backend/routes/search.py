@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models.admin_data import SearchHistory, SearchResult, Setting, StarHotelSearch, User
-from models.restaurant import Restaurant, SearchRequest, SearchResponse
-from services.scraper import scrape_restaurants_threaded
+from models.restaurant import Restaurant, RestaurantDetailRequest, SearchRequest, SearchResponse
+from services.scraper import scrape_restaurant_detail_threaded, scrape_restaurants_threaded
 from services.auth import get_current_user
 
 router = APIRouter()
@@ -132,6 +132,37 @@ async def search_restaurants_endpoint(
             else "No restaurants found. Try a different location or increase the radius."
         ),
     )
+
+
+@router.post("/restaurant/detail", response_model=Restaurant)
+async def restaurant_detail_endpoint(
+    request: RestaurantDetailRequest,
+    user: User = Depends(get_current_user),
+) -> Restaurant:
+    logger.info("Detail request - user=%s maps_url=%r", user.email, request.maps_url[:120])
+    try:
+        detail = await asyncio.wait_for(
+            scrape_restaurant_detail_threaded(request.maps_url),
+            timeout=35,
+        )
+    except TimeoutError:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="This restaurant detail page timed out. Try again or use fewer results.",
+        )
+    except Exception as exc:
+        logger.error("Restaurant detail failed: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Restaurant detail failed: {exc}",
+        )
+
+    if not detail:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Could not extract details for this restaurant.",
+        )
+    return Restaurant(**detail)
 
 
 @router.get("/search/history")

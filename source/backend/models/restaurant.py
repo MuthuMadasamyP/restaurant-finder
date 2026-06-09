@@ -25,6 +25,7 @@ class Restaurant(BaseModel):
     phone: str = "N/A"
     category: str = "N/A"
     website: str = "N/A"
+    maps_url: str = "N/A"
 
     model_config = {"from_attributes": True}
 
@@ -38,6 +39,12 @@ class SearchResponse(BaseModel):
     total_found: int
     restaurants: list[Restaurant]
     message: str = ""
+
+
+class RestaurantDetailRequest(BaseModel):
+    """Request body for fetching one restaurant detail page."""
+
+    maps_url: str = Field(..., min_length=10)
 
 
 class ExportRequest(BaseModel):
