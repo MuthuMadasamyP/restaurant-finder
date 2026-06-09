@@ -252,7 +252,8 @@ async def _do_scrape(page: Page, location: str, radius_km: float, max_results: i
         return []
 
     # ── VISIT EACH PLACE PAGE ─────────────────────────────────────────────────
-    fast_results = await _extract_restaurants_from_cards(page, max_results)
+    full_details = os.getenv("SCRAPER_MODE", "fast").strip().lower() == "full"
+    fast_results = [] if full_details else await _extract_restaurants_from_cards(page, max_results)
     if fast_results:
         logger.info("Collected %d fast card results", len(fast_results))
         enriched_results = await _enrich_fast_results(page, fast_results, place_hrefs)
@@ -404,7 +405,7 @@ async def _enrich_fast_results(
 
 def _detail_enrich_limit() -> int:
     try:
-        return max(0, min(int(os.getenv("DETAIL_ENRICH_LIMIT", "0")), 3))
+        return max(0, min(int(os.getenv("DETAIL_ENRICH_LIMIT", "0")), 10))
     except ValueError:
         return 0
 
